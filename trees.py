@@ -83,19 +83,29 @@ def trunk(scale = 10, n_intermediate = 1, **kwargs):
 def tree(scale = 10, **kwargs):
     
     top = treetop(scale, **kwargs)[0]
-    top.Translate(0,0, scale * .8)
     tr = trunk(scale, **kwargs)[0]
+    
+    center_top = Rhino.Geometry.AreaMassProperties.Compute(top).Centroid
+    apex_trunk = tr.ClosestPoint(Point3d(0,0, 2*scale))
+    
+    
+    top.Translate(apex_trunk - center_top)
     
     # TODO: align to center of mass
     
     return [tr, top]
     
+def rendermaterial(name):
+    for rendermaterial in sc.doc.RenderMaterials.GetEnumerator():
+        if rendermaterial.Name == name:
+            return rendermaterial
 
 
 def many(scale = 10, side = 5, **kwargs):
     """temp function for playing around
     """
-    
+    attributes = Rhino.DocObjects.ObjectAttributes()
+    attributes.MaterialSource = Rhino.DocObjects.ObjectMaterialSource.MaterialFromObject
     
     for x in range(-scale * side, scale * side, 2 * scale):
         for y in range(-scale * side, scale * side, 2 * scale):
@@ -104,17 +114,24 @@ def many(scale = 10, side = 5, **kwargs):
                 
                 each.Translate(x, y, 0)
 
-                attributes = kwargs['trunk'] if ix == 0 else kwargs['treetop']
-                ids.append(sc.doc.Objects.AddBrep(each))
+                this_id = sc.doc.Objects.AddBrep(each, attributes)
+                obj = rs.coercerhinoobject(this_id)
+                obj.RenderMaterial = rendermaterial('bark') if ix == 0 else rendermaterial('leaves')
+                obj.CommitChanges()
                 
+                ids.append(this_id)
             
                 
             group_id = sc.doc.Groups.Add(ids)
             
     sc.doc.Views.Redraw()
     
+
     
 def add_materials():
+    
+    if sc.doc.RenderMaterials.Count > 0:
+        return list(sc.doc.RenderMaterials.GetEnumerator())
     
     leaves = Rhino.DocObjects.Material()
     light_green = System.Drawing.Color.FromArgb(255, 100, 200, 100)
@@ -122,8 +139,6 @@ def add_materials():
     leaves.Name = 'leaves'
     render_leaves = Rhino.Render.RenderMaterial.CreateBasicMaterial(leaves)
     sc.doc.RenderMaterials.Add(render_leaves)
-    leaves_index = 0
-    leaves.CommitChanges()
     
     
     bark = Rhino.DocObjects.Material()
@@ -132,36 +147,17 @@ def add_materials():
     bark.Name = 'bark'
     render_bark = Rhino.Render.RenderMaterial.CreateBasicMaterial(bark)
     sc.doc.RenderMaterials.Add(render_bark)
-    bark_index = 1
-    bark.CommitChanges()
 
     # from https://github.com/mcneel/rhino-developer-samples/blob/6/rhinopython/SampleAddRenderMaterials.py
-    treetop_attrs = Rhino.DocObjects.ObjectAttributes()
-    treetop_attrs.MaterialSource = Rhino.DocObjects.ObjectMaterialSource.MaterialFromObject
-    treetop_attrs.RenderMaterial = leaves
-    treetop_attrs.ColorSource = Rhino.DocObjects.ObjectColorSource.ColorFromObject
-    treetop_attrs.ObjectColor = light_green
-    
-    trunk_attrs = Rhino.DocObjects.ObjectAttributes()
-    trunk_attrs.MaterialSource = Rhino.DocObjects.ObjectMaterialSource.MaterialFromObject
-    trunk_attrs.RenderMaterial = bark
-    trunk_attrs.ColorSource = Rhino.DocObjects.ObjectColorSource.ColorFromObject
-    trunk_attrs.ObjectColor = light_brown
     
     
-    return treetop_attrs, trunk_attrs
+    return render_leaves, render_bark
     
 if __name__ == "__main__":
     
     
-    trunk_attrs, treetop_attrs = add_materials()
-    #l = list(sc.doc.RenderMaterials.GetEnumerator())
-    
-       
-    
-    kwargs = { 'trunk' : trunk_attrs, 'treetop' : treetop_attrs}
-    
-    many(side = 3, **kwargs)
+    leaves, bark = add_materials()
+    many(side = 5)
            
     
     sc.doc.Views.Redraw()
